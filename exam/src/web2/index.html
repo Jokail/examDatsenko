@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web Client 2 — EMQX MQTT</title>
+  <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #f3e5f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .container { background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); width: 480px; overflow: hidden; }
+    .header { background: #7b1fa2; color: #fff; padding: 16px 20px; font-size: 18px; font-weight: bold; }
+    .status { padding: 8px 20px; font-size: 13px; background: #f3e5f5; color: #555; }
+    .status span { font-weight: bold; }
+    #statusText { color: #d32f2f; }
+    #statusText.connected { color: #388e3c; }
+    .messages { height: 300px; overflow-y: auto; padding: 12px 20px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; gap: 8px; }
+    .msg { padding: 8px 12px; border-radius: 8px; font-size: 14px; max-width: 90%; }
+    .msg.sent { background: #7b1fa2; color: #fff; align-self: flex-end; }
+    .msg.received { background: #e0e0e0; color: #333; align-self: flex-start; }
+    .msg .meta { font-size: 11px; opacity: 0.7; margin-bottom: 2px; }
+    .controls { padding: 16px 20px; display: flex; gap: 8px; }
+    input[type="text"] { flex: 1; padding: 10px 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; outline: none; }
+    input[type="text"]:focus { border-color: #7b1fa2; }
+    button { padding: 10px 18px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    #sendBtn { background: #7b1fa2; color: #fff; }
+    #sendBtn:disabled { background: #ce93d8; cursor: not-allowed; }
+    .topic-bar { padding: 6px 20px 10px; font-size: 12px; color: #888; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">Web Client 2 — EMQX</div>
+  <div class="status">Статус: <span id="statusText">Відключено</span></div>
+  <div class="topic-bar">Топік: <code>chat/room</code> &nbsp;|&nbsp; Клієнт: <code>web2-client</code></div>
+  <div class="messages" id="messages"></div>
+  <div class="controls">
+    <input type="text" id="msgInput" placeholder="Введіть повідомлення..." />
+    <button id="sendBtn" disabled>Надіслати</button>
+  </div>
+</div>
+
+<script>
+  const BROKER_URL = 'ws://localhost:8083/mqtt';
+  const TOPIC = 'chat/room';
+  const CLIENT_ID = 'web2-' + Math.random().toString(16).slice(2, 8);
+
+  const statusEl = document.getElementById('statusText');
+  const messagesEl = document.getElementById('messages');
+  const msgInput = document.getElementById('msgInput');
+  const sendBtn = document.getElementById('sendBtn');
+
+  const client = mqtt.connect(BROKER_URL, {
+    clientId: CLIENT_ID,
+    clean: true,
+    reconnectPeriod: 3000,
+  });
+
+  client.on('connect', () => {
+    statusEl.textContent = 'Підключено (' + CLIENT_ID + ')';
+    statusEl.className = 'connected';
+    sendBtn.disabled = false;
+    client.subscribe(TOPIC, { qos: 1 });
+    addMessage('system', 'Підключено до EMQX брокера');
+  });
+
+  client.on('disconnect', () => {
+    statusEl.textContent = 'Відключено';
+    statusEl.className = '';
+    sendBtn.disabled = true;
+  });
+
+  client.on('error', (err) => {
+    addMessage('system', 'Помилка: ' + err.message);
+  });
+
+  client.on('message', (topic, payload) => {
+    const raw = payload.toString();
+    try {
+      const data = JSON.parse(raw);
+      if (data.sender === CLIENT_ID) return;
+      addMessage('received', data.text, data.sender);
+    } catch {
+      addMessage('received', raw, 'unknown');
+    }
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+  msgInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+  function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text) return;
+    const payload = JSON.stringify({ sender: CLIENT_ID, text, time: new Date().toLocaleTimeString() });
+    client.publish(TOPIC, payload, { qos: 1 });
+    addMessage('sent', text, 'Ви');
+    msgInput.value = '';
+  }
+
+  function addMessage(type, text, sender) {
+    const div = document.createElement('div');
+    if (type === 'system') {
+      div.style.cssText = 'font-size:12px;color:#888;text-align:center;padding:4px;';
+      div.textContent = text;
+    } else {
+      div.className = 'msg ' + type;
+      div.innerHTML = '<div class="meta">' + (sender || '') + '</div>' + escapeHtml(text);
+    }
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+</script>
+</body>
+</html>

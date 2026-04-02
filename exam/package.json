@@ -1,0 +1,11 @@
+{
+  "name": "exam-emqx-mqtt",
+  "version": "1.0.0",
+  "description": "Event-Driven архітектура з MQTT-брокером EMQX",
+  "scripts": {
+    "start": "docker compose up -d",
+    "stop": "docker compose down"
+  },
+  "keywords": ["mqtt", "emqx", "event-driven", "websocket"],
+  "license": "MIT"
+}
